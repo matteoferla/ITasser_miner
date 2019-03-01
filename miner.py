@@ -156,6 +156,78 @@ class Itasser():
 
 
 
+######################### MAIN
+
+def part_one():
+    it = Itasser()
+    it.verbose = True
+    it.can_download = True
+    os.mkdir('fasta')
+    try:
+        data = it.get_all_seqs(latest='S449979', earliest='S438773')
+        import csv
+        with open('data.csv', 'w', newline='') as w:
+            sheet = csv.writer(w)
+            sheet.writerow(['identifier', 'sequence'])
+            sheet.writerows(data.items())
+        for k in data:
+            with open('fasta/'+k + '.fa', 'w') as w:
+                w.write('>{i}\n{s}\n\n'.format(s=data[k], i=k))
+    except KeyboardInterrupt:
+        it.store_invalid()
+        print('User exited')
+    else:
+        it.store_invalid()
+        print('finished')
+
+def part_two():
+    data=list(csv.DictReader(open('data.csv')))
+    l = [len(s['sequence']) for s in data]
+    print(l)
+    w = csv.DictWriter(open('data_extra.csv','w',newline=''),fieldnames=('identifier', 'sequence', 'len', 'sheet', 'turn', 'helix'))
+    w.writeheader()
+    from Bio.SeqUtils import ProtParam
+    for gene in data:
+        (h,t,s)=ProtParam.ProteinAnalysis(gene['sequence']).secondary_structure_fraction()
+        w.writerow({'identifier': gene['identifier'],
+                    'sequence': gene['sequence'],
+                    'len':len(gene['sequence']),
+                    'sheet': s,
+                   'turn':t,
+                    'helix':h})
+
+
+
+def part_blast():
+    import csv, os
+    #os.system('ncbi-blast-2.8.1+/bin/makeblastdb -in human.fa -parse_seqids -dbtype prot -taxid 9606')
+    from Bio.Blast import NCBIXML
+    def _get(blast_record):
+        for align in blast_record.alignments:
+            for hsp in align.hsps:
+                d = {'identifier': infile.replace('.fa', ''), 'sequence': 'x', 'match': align.title[0:50], 'match_score': hsp.score, 'match_start': hsp.query_start, 'match_length': hsp.align_length,
+                     'match_identity': hsp.identities / hsp.align_length}
+                return d
+        else:
+            return None
+    w=csv.DictWriter(open('matched.csv','w',newline=''), fieldnames=('identifier','sequence','match','match_score','match_start','match_length','match_identity'))
+    w.writeheader()
+    for file in os.listdir('fasta'):
+        try:
+            if '.fa' not in file:
+                continue
+            print(file.replace('.fa',''))
+            infile = 'fasta/'+file
+            blastfile= infile.replace('.fa', '_blast.xml')
+            os.system('ncbi-blast-2.8.1+/bin/blastp -query {infile} -db human.fa -outfmt 5 -num_threads 6 > {outfile}'.format(infile=infile, outfile=blastfile))
+            blast_record = NCBIXML.read(open(blastfile))
+            d = _get(blast_record)
+            if d:
+                w.writerow(d)
+        except Exception as err:
+            warn('Caught: '+str(err)+' for file '+file)
+
+
 
 
 
@@ -167,23 +239,6 @@ if __name__ == "__main__":
     parser.add_argument('--version', action='version', version=__version__)
     parser.add_argument('--verbose', action='store_true', help='Runs giving details')
     args = parser.parse_args()
-    ### SCRIPT
-    it=Itasser()
-    it.verbose = True
-    it.can_download = True
-    try:
-        data=it.get_all_seqs(latest='S449979',earliest='S438773')
-        import csv
-        with open('data.csv','w',newline='') as w:
-            sheet=csv.writer(w)
-            sheet.writerow(['identifier','sequence'])
-            sheet.writerows(data.items())
-        for k in data:
-            with open(k+'.fa','w') as w:
-                w.write('>{i}\n{s}\n\n'.format(s=data[k],i=k))
-    except KeyboardInterrupt:
-        it.store_invalid()
-        print('User exited')
-    else:
-        it.store_invalid()
-        print('finished')
+    #part_one()
+    part_two()
+    #part_blast()
